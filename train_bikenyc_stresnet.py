@@ -15,11 +15,13 @@ from helper.make_dataset import make_dataloader
 from torch.utils.data.sampler import SubsetRandomSampler
 
 import numpy as np
+import pandas as pd
 import time
 from datetime import datetime
 
 from st_resnet import stresnet
 from utils import weight_init, EarlyStopping, compute_errors
+from forecast_copy import prepare_df, prepare_dataset, load_gps_data, get_matrix, simple_gps_forecast
 
 #torch.autograd.set_detect_anomaly(True)
 #@click.command()
@@ -27,17 +29,17 @@ from utils import weight_init, EarlyStopping, compute_errors
 #@click.argument('output_filepath', type=click.Path())
 
 len_closeness = 3  # length of closeness dependent sequence
-len_period = 4  # length of peroid dependent sequence
+len_period = 4  # length of period dependent sequence
 len_trend = 4  # length of trend dependent sequence
 nb_residual_unit = 4   # number of residual units
 
-map_height, map_width = 16, 8  # grid size
-nb_flow = 2  # there are two types of flows: new-flow and end-flow
-nb_area = 81
+map_height, map_width = 32, 32  # grid size ##Lanterne: I believe we would insert noCells here
+nb_flow = 1  # there are two types of flows: new-flow and end-flow
+nb_area = 81 # ?????? Unsure of the meaning here
 m_factor = math.sqrt(1. * map_height * map_width / nb_area)
 print('factor: ', m_factor)
 
-epoch_nums = 500
+epoch_nums = 1
 learning_rate = 0.0002
 batch_size = 32
 params = {'batch_size': batch_size,
@@ -59,9 +61,26 @@ model_name = 'stresnet'
 os.makedirs(checkpoint_dir+ '/%s'%(model_name), exist_ok=True)
 
 
-initial_checkpoint = './reports/checkpoint/initial_00000100_model.pth'
+initial_checkpoint = './reports/checkpoint/stresnet/model.best.pth'
 LOAD_INITIAL = True
+COMPARE_TO_HA = True
 random_seed = int(time.time())
+
+def compare_to_ha(criterion, val_timestamps, Y, mmn):
+    df = load_gps_data("C:/Users/shadow/Downloads/predicio.csv")
+    # df, _ = prepare_df(df)
+    X = []
+    for dt in val_timestamps[:10]:
+        predicted_df = simple_gps_forecast(dt, df)
+        predicted_df = prepare_df(predicted_df, for_benchmark=True, noCells=100)
+        X.append(get_matrix(predicted_df, noCells=100))
+    #criterion must return mse, mae and rmse in that order
+    X = np.array(X)
+    X = mmn.transform(X)
+    # return np.array(X)
+    return criterion(X, Y)
+
+
 
 def valid(model, val_generator, criterion, device):
     model.eval()
@@ -104,6 +123,8 @@ def train():
         np.random.seed(random_seed)
         np.random.shuffle(indices)
     train_indices, val_indices = indices[split:], indices[:split]
+    val_timestamps = [train_dataset.timestamp_train[i] for i in indices[:split]]
+    val_Y = [train_dataset.Y_data[i] for i in indices[:split]]
     print('training size:', len(train_indices))
     print('val size:', len(val_indices))
 
@@ -209,15 +230,22 @@ def train():
     print('Training mse: %.6f mae: %.6f rmse (norm): %.6f, rmse (real): %.6f' % (
         mse, mae, rmse, rmse * (train_dataset.mmn._max - train_dataset.mmn._min) / 2. * m_factor))
 
+    if COMPARE_TO_HA:
+        print("Preparing Benchmark Scores, this may take a few minutes.....")
+        # return compare_to_ha(compute_errors, val_timestamps, val_Y, train_dataset.mmn)
+        mse_benchmark, mae_benchmark, rmse_benchmark = compare_to_ha(compute_errors, val_timestamps, val_Y, train_dataset.mmn)
+        print('Benchmark mse: %.6f mae: %.6f rmse (norm): %.6f, rmse (real): %.6f' % (
+            mse_benchmark, mae_benchmark, rmse_benchmark, rmse_benchmark * (train_dataset.mmn._max - train_dataset.mmn._min) / 2. * m_factor))
+
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(level=logging.INFO, format=log_fmt)
 
     # not used in this stub but often useful for finding various files
-    project_dir = Path(__file__).resolve().parents[2]
+    # project_dir = Path(__file__).resolve().parents[2]
 
     # find .env automagically by walking up directories until it's found, then
     # load up the .env entries as environment variables
     load_dotenv(find_dotenv())
 
-    train()
+    X = train()

@@ -134,9 +134,14 @@ def weight_init(m):
                 init.normal_(param.data)
 
 def compute_errors(preds, y_true):
-    pred_mean = preds[:, 0:2]
-    diff = y_true - pred_mean
+    try:
+        pred_mean = preds[:]
+        diff = y_true[:len(preds)] - pred_mean
 
+    except:
+        print(np.array(y_true).shape)
+        print(preds.shape)
+        return 0, 0, 0
     mse = np.mean(diff ** 2)
     rmse = np.sqrt(mse)
     mae = np.mean(np.abs(diff))

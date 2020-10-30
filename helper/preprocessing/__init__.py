@@ -1,3 +1,4 @@
+from datetime import timedelta, datetime
 import pandas as pd
 import numpy as np
 from copy import copy
@@ -11,7 +12,7 @@ from ..utils import string2timestamp
 def timestamp2vec(timestamps):
     # tm_wday range [0, 6], Monday is 0
     # vec = [time.strptime(str(t[:8], encoding='utf-8'), '%Y%m%d').tm_wday for t in timestamps]  # python3
-    vec = [time.strptime(str(t[:8], encoding='utf-8'), '%Y%m%d').tm_wday for t in timestamps]  # python2
+    vec = [t.weekday() for t in timestamps]  # lanterne
     ret = []
     for i in vec:
         v = [0 for _ in range(7)]
@@ -30,19 +31,19 @@ def remove_incomplete_days(data, timestamps, T=48):
     days_incomplete = []
     i = 0
     while i < len(timestamps):
-        if int(timestamps[i][8:]) != 1:
+        if timestamps[i].hour != 0:
             i += 1
-        elif i+T-1 < len(timestamps) and int(timestamps[i+T-1][8:]) == T:
-            days.append(timestamps[i][:8])
+        elif i+T-1 < len(timestamps) and timestamps[i+T-1] == timestamps[i]+timedelta(hours=23): #MUST BE CHANGED IF WE CHANGE INTERVALS!!!!
+            days.append(datetime(timestamps[i].year,timestamps[i].month,timestamps[i].day))
             i += T
         else:
-            days_incomplete.append(timestamps[i][:8])
+            days_incomplete.append(datetime(timestamps[i].year,timestamps[i].month,timestamps[i].day))
             i += 1
     print("incomplete days: ", days_incomplete)
     days = set(days)
     idx = []
     for i, t in enumerate(timestamps):
-        if t[:8] in days:
+        if datetime(t.year,t.month,t.day) in days:
             idx.append(i)
 
     data = data[idx]

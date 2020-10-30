@@ -1,12 +1,13 @@
 from __future__ import print_function
 import h5py
 import time
+import pandas as pd
 
 def load_stdata(fname):
-    f = h5py.File(fname, 'r')
-    data = f['data'].value
-    timestamps = f['date'].value
-    f.close()
+    # f = h5py.File(fname, 'r')
+    f = pd.read_pickle(fname)
+    data = f['data'].values
+    timestamps = f.index
     return data, timestamps
 
 

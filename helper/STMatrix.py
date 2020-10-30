@@ -57,7 +57,7 @@ class STMatrix(object):
         """current version
         """
         # offset_week = pd.DateOffset(days=7)
-        offset_frame = pd.DateOffset(minutes=24 * 60 // self.T)
+        offset_frame = pd.DateOffset(minutes=24 * 60 // self.T) # T is divisions per day Lanterne
         XC = []
         XP = []
         XT = []
@@ -67,7 +67,7 @@ class STMatrix(object):
                    [PeriodInterval * self.T * j for j in range(1, len_period+1)],
                    [TrendInterval * self.T * j for j in range(1, len_trend+1)]]
 
-        i = max(self.T * TrendInterval * len_trend, self.T * PeriodInterval * len_period, len_closeness)
+        i = max(self.T * TrendInterval * len_trend, self.T * PeriodInterval * len_period, len_closeness) # Lanterne so taht we have enough data before index
         while i < len(self.pd_timestamps):
             Flag = True
             for depend in depends:

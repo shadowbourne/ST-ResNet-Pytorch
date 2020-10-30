@@ -1,7 +1,8 @@
-import click
+# import click   
 import logging
 from pathlib import Path
 from dotenv import find_dotenv, load_dotenv
+from dotenv import main
 import torch
 import torch.nn as nn
 from torchsummary import summary
@@ -131,7 +132,7 @@ class stresnet(nn.Module):
             ('conv1', conv3x3(in_channels = in_channels, out_channels = 64)),
             ('ResUnits', ResUnits(_residual_unit, nb_filter = 64, repetations = self.nb_residual_unit)),
             ('relu', nn.ReLU()),
-            ('conv2', conv3x3(in_channels = 64, out_channels = 2)),
+            ('conv2', conv3x3(in_channels = 64, out_channels = 1)),
             ('FusionLayer', TrainableEltwiseLayer(n = self.nb_flow, h = self.map_height, w = self.map_width))
         ]))
 
@@ -139,15 +140,15 @@ class stresnet(nn.Module):
         # Three-way Convolution
         main_output = 0
         if self.c_conf is not None:
-            input_c = input_c.view(-1, self.c_conf[0]*2, self.map_height, self.map_width)
+            input_c = input_c.view(-1, self.c_conf[0]*1, self.map_height, self.map_width)
             out_c = self.c_way(input_c)
             main_output += out_c
         if self.p_conf is not None:
-            input_p = input_p.view(-1, self.p_conf[0]*2, self.map_height, self.map_width)
+            input_p = input_p.view(-1, self.p_conf[0]*1, self.map_height, self.map_width)
             out_p = self.p_way(input_p)
             main_output += out_p
         if self.t_conf is not None:
-            input_t = input_t.view(-1, self.t_conf[0]*2, self.map_height, self.map_width)
+            input_t = input_t.view(-1, self.t_conf[0]*1, self.map_height, self.map_width)
             out_t = self.t_way(input_t)
             main_output += out_t
 
@@ -161,10 +162,12 @@ class stresnet(nn.Module):
             external_output = self.relu(external_output)
             external_output = external_output.view(-1, self.nb_flow, self.map_height, self.map_width)
             #main_output = torch.add(main_output, external_output)
+            # print(main_output.shape)
+            # print(external_output.shape)
             main_output += external_output
 
         else:
-            print('external_dim:', external_dim)
+            print('external_dim:', self.external_dim)
 
 
         main_output = self.tanh(main_output)
@@ -193,5 +196,5 @@ if __name__ == '__main__':
     print('trainable params:', pytorch_total_params)
 
     model.to(device)
-    #summary(model, [(3, 2, 16, 8), (4, 2, 16, 8), (4, 2, 16, 8), (8, )], batch_size=-1, device= 'cuda')
-    #print(model)demo_net.py
+    summary(model, [(3, 2, 16, 8), (4, 2, 16, 8), (4, 2, 16, 8), (8, )], device= 'cuda')
+    # print(model)demo_net.py

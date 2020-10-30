@@ -39,9 +39,9 @@ def string2timestamp(strings, T=48):
     time_per_slot = 24.0 / T
     num_per_T = T // 24
     for t in strings:
-        year, month, day, slot = int(t[:4]), int(t[4:6]), int(t[6:8]), int(t[8:])-1
-        timestamps.append(pd.Timestamp(datetime(year, month, day, hour=int(slot * time_per_slot), minute=(slot % num_per_T) * int(60.0 * time_per_slot))))
-
+        # year, month, day, slot = int(t[:4]), int(t[4:6]), int(t[6:8]), int(t[8:])-1
+        # timestamps.append(pd.Timestamp(datetime(year, month, day, hour=int(slot * time_per_slot), minute=(slot % num_per_T) * int(60.0 * time_per_slot))))
+        timestamps.append(pd.Timestamp(t))
     return timestamps
 
 
