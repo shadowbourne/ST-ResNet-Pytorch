@@ -1,47 +1,22 @@
-
-# from helpers import load_gps_data
-# import sys
-# noCells = 32 
-# datetime(2020,9,11,13)
-
-
-#Old system
-# cellCenter = noCells // 2
-# cellSize = 0.1 # in km
-# # Estimates for how large the cells should be
-# cellDeltaLat = cellSize / 70
-# cellDeltaLng = cellSize / 110
-
-# bbox = [[51.448953, 51.546925], [-0.259661, 0.027820]]
-# cellDeltaLat = ( bbox[0][1] - bbox[0][0] ) / noCells
-# cellDeltaLng = ( bbox[1][1] - bbox[1][0] ) / noCells
-
-# halfMatrixDeltaLat = cellDeltaLat * noCells / 2
-# halfMatrixDeltaLng = cellDeltaLng * noCells / 2
-
-# 51.546925, -0.259661
-# 51.448953, 0.027820
-# def collatedLambda(row, bbox, cellDeltaLat, cellDeltaLng):
-#     row["localHour"] = row.local.replace(second=0, microsecond=0, minute=0)
-#     row.latitude = np.floor((row.latitude - bbox["latitude"][0]) / cellDeltaLat)
-#     row.longitude = np.floor((row.longitude - bbox["longitude"][0]) / cellDeltaLng)
-#     return row
-
-
 import numpy as np
+from numpy import histogram2d
 import pandas as pd
 from datetime import datetime
 
-
 noCells = 32
 
+def round_and_process_timestamp(dt):
+    return datetime.utcfromtimestamp(int(dt)).replace(second=0, microsecond=0, minute=0) + pd.Timedelta(1, "h")
 
+def process_timestamp(dt):
+    return datetime.utcfromtimestamp(int(dt)) + pd.Timedelta(1, "h")
 
 def load_gps_data(path):
+
     df = pd.read_csv(path)
     df["utc"] = df["timestamp"].apply(datetime.utcfromtimestamp)
     df["local"] = df["utc"] + pd.Timedelta(1, "h")
-    df = df.drop(["horizontal_accuracy", "utc"], axis=1)
+    df = df.drop(["horizontal_accuracy", "utc", "timestamp", "device_aid"], axis=1)
     return df
 
 def simple_gps_forecast(dt, df): #edited version from forecast.py
@@ -75,25 +50,27 @@ def simple_gps_forecast(dt, df): #edited version from forecast.py
     # real_df = df[(df.local.dt.hour == hour.hour) & (df.local.dt.date == target_date)]
     return out_df
 
-def prepare_df(df, for_benchmark=False, noCells=noCells):
-    bbox = { "latitude":[51.448953, 51.546925], "longitude": [-0.259661, 0.027820] } #lat[lower,upper] lng[lower,upper]
+def prepare_df(df, for_benchmark=False, noCells=noCells, bbox={ "latitude":[51.448953, 51.546925], "longitude": [-0.259661, 0.027820] }):
+    #NOTE BBOX CAN BE IMPLEMENTED AS AN ARRAY INSTEAD AND INSERTED INTO histogram2d as range=[[],[]]
+    # bbox = { "latitude":[51.448953, 51.546925], "longitude": [-0.259661, 0.027820] } #lat[lower,upper] lng[lower,upper] 
     df = df[
         (df.latitude > bbox["latitude"][0]) & (df.latitude < bbox["latitude"][1]) & (df.longitude > bbox["longitude"][0]) & (df.longitude < bbox["longitude"][1])
     ]
-    df = df.drop(["timestamp", "device_aid", "local"], axis=1)
-    cellDeltaLat = ( bbox["latitude"][1] - bbox["latitude"][0] ) / noCells
-    cellDeltaLng = ( bbox["longitude"][1] - bbox["longitude"][0] ) / noCells
-    lat_bin = lambda x: np.floor((x - bbox["latitude"][0]) / cellDeltaLat)
-    lng_bin = lambda x: np.floor((x - bbox["longitude"][0]) / cellDeltaLng)
-    # df = df.apply(collatedLambda, axis=1, args=(bbox,cellDeltaLat,cellDeltaLng,))
-    df["latitude"] = df.latitude.map(lat_bin)
-    df["longitude"] = df.longitude.map(lng_bin)
+    #old system, 60% slower
+    # cellDeltaLat = ( bbox["latitude"][1] - bbox["latitude"][0] ) / noCells
+    # cellDeltaLng = ( bbox["longitude"][1] - bbox["longitude"][0] ) / noCells
+    # lat_bin = lambda x: np.floor((x - bbox["latitude"][0]) / cellDeltaLat)
+    # lng_bin = lambda x: np.floor((x - bbox["longitude"][0]) / cellDeltaLng)
+    # df["latitude"] = df.latitude.map(lat_bin)
+    # df["longitude"] = df.longitude.map(lng_bin)
+
     if for_benchmark:
         return df
 
-    df["localHour"] = df.local.map(lambda x: x.replace(second=0, microsecond=0, minute=0))
+    df["localHour"] = df.local.map(lambda x: x.replace(second=0, microsecond=0, minute=0)) # very slow but needed to get timestamps
+    timestamps = df.localHour[(df.localHour.dt.hour > 7) & (df.localHour.dt.hour < 19)].sort_values().unique()
     timestamps = df.localHour.sort_values().unique()
-    # df = df.groupby(["latitude", "longitude"])
+
     return df, timestamps
 
 def prepare_dataset(df, timestamps, noCells=noCells):
@@ -108,144 +85,41 @@ def get_matrix(df, noCells=noCells, dt=None):
         df = df[
                 (df.localHour == dt)
             ]
-    df = df.groupby(["latitude", "longitude"]).size()
-    df = df.fillna(0)
-    matrix = np.zeros((noCells, noCells))
-    for index in df.index:
-        matrix[int(index[1])][int(index[0])] = df.loc[index]
-    return matrix
+    return histogram2d(df.latitude, df.longitude, bins=noCells)[0]
 
+    # old system, 60% slower
+    # df = df.groupby(["latitude", "longitude"]).size()
+    # df = df.fillna(0)
+    # matrix = np.zeros((noCells, noCells))
+    # for index in df.index:
+    #     matrix[int(index[1])][int(index[0])] = df.loc[index]
+    # # print(datetime.now()-start)
+    # return matrix
 
+from time import time
 if __name__ == '__main__':
+    #FOR HA TUNING. V
+    start = time()
+    df = load_gps_data("C:/Lanterne/predicio.csv").sort_values("local")
+    print(start - time())
+    start = time()
+    # start = datetime.now() 51.485174, -0.095863
+    bbox = { "latitude":[51.455174, 51.515174], "longitude": [-0.141863, -0.049863] } #selected so a 32 by 32 grid will be 200m each
+    dfForValidationYPrep, validation_timestamps = prepare_df(df, noCells=32, bbox=bbox)
+    dfForValidationYPrep.to_csv("smallerPrepreparedPredicio2.csv")
+    print(start - time())
+    start = time()
+    validation_timestamps = np.random.choice(np.partition(validation_timestamps, int(len(validation_timestamps)*0.1))[:int(len(validation_timestamps)*0.1)], 20, replace=False)
+    validation_timestamps = pd.to_datetime(validation_timestamps)
+    dataset = prepare_dataset(dfForValidationYPrep, validation_timestamps, noCells=32)
+    print(start - time())
+    start = time()
+    dataset.to_pickle("validationDataset2.pickle")
+    print(start - time())
+
+    exit() 
+    #FOR CNN. V
     df = load_gps_data("C:/Users/shadow/Downloads/predicio.csv")
     df, timestamps = prepare_df(df)
     dataset = prepare_dataset(df, timestamps, noCells)
     dataset.to_csv("predicio_dataset.csv")
-
-
-#datetime(x.dt.year, x.dt.day, x.dt.day, x.dt.hour)
-
-# def forecast(df, dt, lat, lng):
-#     trainingDf = pd.DataFrame(columns=["crowdFlowWindows", "y"]) #possible to add weather here
-    
-#     for 
-
-## For https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=8526506 implementation (not the one we are now doing)
-
-# def prepare_matrix(df, dt, lowerLat, lowerLng):
-#     df_slice = df[
-#         (df.localHour == dt)
-#     ]
-#     matrix = np.empty((noCells, noCells))
-#     #lng = x, lat = y
-#     for y in range(noCells):
-#         for x in range(noCells):
-#             matrix[y][x] = len(df[
-#                 (df.latitude > lowerLat + y*cellDeltaLat) & (df.latitude < lowerLat + (y+1)*cellDeltaLat) & (df.longitude > lowerLng + x*cellDeltaLng) & (df.longitude < lowerLng + (x+1)*cellDeltaLng)
-#             ].index)
-#     return matrix
-
-# print(prepare_windows(df, datetime(2020,9,11,13), 51.906640, -0.934136))
-# sys.exit(1)
-
-#For ST-ResNet
-# step = 0.2
-# to_bin = lambda x: np.floor(x / step) * step
-# df["latbin"] = df.Latitude.map(to_bin)
-# df["lonbin"] = df.Longitude.map(to_bin)
-# groups = df.groupby(("latbin", "lonbin"))
-
-
-
-
-
-
-
-
-## For https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=8526506 implementation (not the one we are now doing)
-
-# def prepare_windows(df, dt, lat, lng):
-#     lowerLat = lat - halfMatrixDeltaLat
-#     lowerLng = lng - halfMatrixDeltaLng
-#     df_slice = df[
-#         (df.latitude > lowerLat) & (df.latitude < lat + halfMatrixDeltaLat) & (df.longitude > lowerLng) & (df.longitude < lng + halfMatrixDeltaLng)
-#     ]
-#     windowIntToCheck = [1,2,24,168] #Add whatever windows of interest
-#     windowDatetimes = [dt - timedelta(hours=window) for window in windowIntToCheck]
-#     windowsArray = []
-#     for windowDt in windowDatetimes:
-#         windowsArray.append(prepare_matrix(df_slice, windowDt, lowerLat, lowerLng))
-#     return windowsArray
-
-# def prepare_matrix(df, dt, lowerLat, lowerLng):
-#     df_slice = df[
-#         (df.localHour == dt)
-#     ]
-#     matrix = np.empty((noCells, noCells))
-#     #lng = x, lat = y
-#     for y in range(noCells):
-#         for x in range(noCells):
-#             matrix[y][x] = len(df[
-#                 (df.latitude > lowerLat + y*cellDeltaLat) & (df.latitude < lowerLat + (y+1)*cellDeltaLat) & (df.longitude > lowerLng + x*cellDeltaLng) & (df.longitude < lowerLng + (x+1)*cellDeltaLng)
-#             ].index)
-#     return matrix
-
-# def optimize_SARIMA(parameters_list, d, D, s, exog):
-#     """
-#         Return dataframe with parameters, corresponding AIC and SSE
-        
-#         parameters_list - list with (p, q, P, Q) tuples
-#         d - integration order
-#         D - seasonal integration order
-#         s - length of season
-#         exog - the exogenous variable
-#     """
-    
-#     results = []
-    
-#     for param in tqdm_notebook(parameters_list):
-#         try: 
-#             model = SARIMAX(exog, order=(param[0], d, param[1]), seasonal_order=(param[2], D, param[3], s)).fit(disp=-1)
-#         except:
-#             continue
-            
-#         aic = model.aic
-#         results.append([param, aic])
-        
-#     result_df = pd.DataFrame(results)
-#     result_df.columns = ['(p,q)x(P,Q)', 'AIC']
-#     #Sort in ascending order, lower AIC is better
-#     result_df = result_df.sort_values(by='AIC', ascending=True).reset_index(drop=True)
-    
-#     return result_df
-
-    
-# p = range(0, 4, 1)
-# d = 1
-# q = range(0, 4, 1)
-# P = range(0, 4, 1)
-# D = 1
-# Q = range(0, 4, 1)
-# s = 4
-# parameters = product(p, q, P, Q)
-# parameters_list = list(parameters)
-# print(len(parameters_list))
-
-# result_df = optimize_SARIMA(parameters_list, 1, 1, 4, data['data'])
-# print(result_df)
-
-# # best_model = SARIMAX(data['data'], order=(0, 1, 2), seasonal_order=(0, 1, 2, 4)).fit(dis=-1)
-# # print(best_model.summary())
-
-# # best_model.plot_diagnostics(figsize=(15,12));
-
-# # data['arima_model'] = best_model.fittedvalues
-# # data['arima_model'][:4+1] = np.NaN
-# # forecast = best_model.predict(start=data.shape[0], end=data.shape[0] + 8)
-# # forecast = data['arima_model'].append(forecast)
-# # plt.figure(figsize=(15, 7.5))
-# # plt.plot(forecast, color='r', label='model')
-# # plt.axvspan(data.index[-1], forecast.index[-1], alpha=0.5, color='lightgrey')
-# # plt.plot(data['data'], label='actual')
-# # plt.legend()
-# # plt.show()
