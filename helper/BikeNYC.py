@@ -20,7 +20,8 @@ def load_data(T=24, nb_flow=1, len_closeness=None, len_period=None, len_trend=No
               preprocess_name='preprocessing.pkl', meta_data=True):
     assert(len_closeness + len_period + len_trend > 0)
     # load data
-    data, timestamps = load_stdata(os.path.join(DATAPATH, 'Predicio', 'predicioLondon.pickle'))
+    # data, timestamps = load_stdata(os.path.join(DATAPATH, 'Predicio', 'predicioLondon.pickle'))
+    data, timestamps = load_stdata("C:/Lanterne/predicio_dataset.pickle")
     # print(timestamps)
     # remove a certain day which does not have 48 timestamps
     data, timestamps = remove_incomplete_days(data, timestamps, T)
@@ -64,6 +65,9 @@ def load_data(T=24, nb_flow=1, len_closeness=None, len_period=None, len_trend=No
     XP = np.vstack(XP)
     XT = np.vstack(XT)
     Y = np.vstack(Y)
+    # print(XC)
+    # print(XP)
+    # print(XT)
     print("XC shape: ", XC.shape, "XP shape: ", XP.shape, "XT shape: ", XT.shape, "Y shape:", Y.shape)
     XC_train, XP_train, XT_train, Y_train = XC[:-len_test], XP[:-len_test], XT[:-len_test], Y[:-len_test]
     XC_test, XP_test, XT_test, Y_test = XC[-len_test:], XP[-len_test:], XT[-len_test:], Y[-len_test:]
@@ -74,6 +78,7 @@ def load_data(T=24, nb_flow=1, len_closeness=None, len_period=None, len_trend=No
     for l, X_ in zip([len_closeness, len_period, len_trend], [XC_train, XP_train, XT_train]):
         if l > 0:
             X_train.append(X_)
+
     for l, X_ in zip([len_closeness, len_period, len_trend], [XC_test, XP_test, XT_test]):
         if l > 0:
             X_test.append(X_)

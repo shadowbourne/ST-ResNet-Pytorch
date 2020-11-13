@@ -10,7 +10,7 @@ from . import BikeNYC
 
 
 T = 24
-days_test = 10
+days_test = 3
 len_test = T * days_test
 
 class make_dataloader(data.Dataset):
