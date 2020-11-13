@@ -21,7 +21,7 @@ from datetime import datetime
 
 from st_resnet import stresnet
 from utils import weight_init, EarlyStopping, compute_errors
-from crowdlive_preprocessing import prepare_df, prepare_dataset, load_gps_data, get_matrix, simple_gps_forecast
+from crowdlive_preprocessing import prepare_df, prepare_dataset, load_gps_data, get_matrix, simple_gps_forecast, tuned_gps_forecast
 
 #torch.autograd.set_detect_anomaly(True)
 #@click.command()
@@ -39,7 +39,7 @@ nb_area = 81 # ?????? Unsure of the meaning here
 m_factor = math.sqrt(1. * map_height * map_width / nb_area)
 print('factor: ', m_factor)
 
-epoch_nums = 1
+epoch_nums = 1000
 learning_rate = 0.0002
 batch_size = 32
 params = {'batch_size': batch_size,
@@ -61,26 +61,42 @@ model_name = 'stresnet'
 os.makedirs(checkpoint_dir+ '/%s'%(model_name), exist_ok=True)
 
 
-initial_checkpoint = './reports/checkpoint/stresnet/model.best.pth'
+initial_checkpoint = './reports/checkpoint/stresnet/00000499_model.pth'
 LOAD_INITIAL = True
 COMPARE_TO_HA = True
 random_seed = int(time.time())
 
-def compare_to_ha(criterion, val_timestamps, Y, mmn):
-    df = load_gps_data("C:/Users/shadow/Downloads/predicio.csv")
+def compare_to_simple_ha(criterion, val_timestamps, Y, mmn):
+    # df = load_gps_data("C:/Users/shadow/Downloads/predicio.csv")
+    df = pd.read_csv("C:/Lanterne/smallerPrepreparedPredicio01234.csv")
+    df.local = pd.to_datetime(df.local)
     # df, _ = prepare_df(df)
     X = []
     for dt in val_timestamps[:10]:
         predicted_df = simple_gps_forecast(dt, df)
-        predicted_df = prepare_df(predicted_df, for_benchmark=True, noCells=100)
-        X.append(get_matrix(predicted_df, noCells=100))
+        predicted_df = prepare_df(predicted_df, for_benchmark=True, noCells=map_height)
+        X.append(get_matrix(predicted_df, noCells=map_height))
     #criterion must return mse, mae and rmse in that order
     X = np.array(X)
     X = mmn.transform(X)
     # return np.array(X)
     return criterion(X, Y)
 
-
+def compare_to_tuned_ha(criterion, val_timestamps, Y, mmn):
+    # df = load_gps_data("C:/Users/shadow/Downloads/predicio.csv")
+    df = pd.read_csv("C:/Lanterne/smallerPrepreparedPredicio01234.csv")
+    df.local = pd.to_datetime(df.local)
+    # df, _ = prepare_df(df)
+    X = []
+    for dt in val_timestamps[:10]:
+        predicted_df = tuned_gps_forecast(dt, df)
+        predicted_df = prepare_df(predicted_df, for_benchmark=True, noCells=map_height)
+        X.append(get_matrix(predicted_df, noCells=map_width))
+    #criterion must return mse, mae and rmse in that order
+    X = np.array(X)
+    X = mmn.transform(X)
+    # return np.array(X)
+    return criterion(X, Y)
 
 def valid(model, val_generator, criterion, device):
     model.eval()
@@ -93,8 +109,9 @@ def valid(model, val_generator, criterion, device):
         X_meta = X_meta.type(torch.FloatTensor).to(device)
 
         # Forward pass
-        outputs = model(X_c, X_p, X_t, X_meta)
+        outputs = model(X_c, X_p, X_t, X_meta)#.cpu().data.numpy()
         mse, _, _ = criterion(outputs.cpu().data.numpy(), Y_batch.data.numpy())
+        # mse, _, _ = criterion(outputs.reshape(len(outputs), map_width, map_height), Y_batch.data.numpy())
 
         mean_loss.append(mse)
 
@@ -176,7 +193,7 @@ def train():
             # Forward pass
             outputs = model(X_c, X_p, X_t, X_meta)
             #print(outputs[0])
-            loss = loss_fn(outputs, Y_batch)
+            loss = loss_fn(outputs.reshape(len(outputs), map_width, map_height), Y_batch)
 
             # Backward and optimize
             optimizer.zero_grad()
@@ -216,8 +233,10 @@ def train():
         #Y_batch = Y_batch.type(torch.FloatTensor).to(device)
 
         # Forward pass
-        outputs = model(X_c, X_p, X_t, X_meta)
-        mse, mae, rmse = compute_errors(outputs.cpu().data.numpy(), Y_batch.data.numpy())
+        outputs = model(X_c, X_p, X_t, X_meta)#.cpu().data.numpy()
+        mse, mae, rmse = compute_errors(outputs.cpu().data.numpy(), Y_batch.data.numpy()) #original version, bug has appeared where shape is x,1,32,32 ratehr than x,32,32? this did not happen 3 weeks ago...
+        # mse, mae, rmse = compute_errors(outputs.reshape(len(outputs),map_width, map_height), Y_batch.data.numpy())
+
 
         rmse_list.append(rmse)
         mse_list.append(mse)
@@ -233,8 +252,11 @@ def train():
     if COMPARE_TO_HA:
         print("Preparing Benchmark Scores, this may take a few minutes.....")
         # return compare_to_ha(compute_errors, val_timestamps, val_Y, train_dataset.mmn)
-        mse_benchmark, mae_benchmark, rmse_benchmark = compare_to_ha(compute_errors, val_timestamps, val_Y, train_dataset.mmn)
-        print('Benchmark mse: %.6f mae: %.6f rmse (norm): %.6f, rmse (real): %.6f' % (
+        mse_benchmark, mae_benchmark, rmse_benchmark = compare_to_simple_ha(compute_errors, val_timestamps, val_Y, train_dataset.mmn)
+        print('Simple HA Benchmark mse: %.6f mae: %.6f rmse (norm): %.6f, rmse (real): %.6f' % (
+            mse_benchmark, mae_benchmark, rmse_benchmark, rmse_benchmark * (train_dataset.mmn._max - train_dataset.mmn._min) / 2. * m_factor))
+        mse_benchmark, mae_benchmark, rmse_benchmark = compare_to_tuned_ha(compute_errors, val_timestamps, val_Y, train_dataset.mmn)
+        print('Tuned HA Benchmark mse: %.6f mae: %.6f rmse (norm): %.6f, rmse (real): %.6f' % (
             mse_benchmark, mae_benchmark, rmse_benchmark, rmse_benchmark * (train_dataset.mmn._max - train_dataset.mmn._min) / 2. * m_factor))
 
 if __name__ == '__main__':

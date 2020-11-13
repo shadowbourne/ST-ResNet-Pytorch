@@ -79,8 +79,8 @@ class TrainableEltwiseLayer(nn.Module):
 
 
 class stresnet(nn.Module):
-    def __init__(self, c_conf=(3, 2, 32, 32), p_conf=(3, 2, 32, 32),
-                 t_conf=(3, 2, 32, 32), external_dim=8, nb_residual_unit=3):
+    def __init__(self, c_conf=(3, 1, 32, 32), p_conf=(3, 1, 32, 32),
+                 t_conf=(3, 1, 32, 32), external_dim=8, nb_residual_unit=3):
         '''
             C - Temporal Closeness
             P - Period
