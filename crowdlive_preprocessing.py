@@ -50,6 +50,20 @@ def simple_gps_forecast(dt, df): #edited version from forecast.py
     # real_df = df[(df.local.dt.hour == hour.hour) & (df.local.dt.date == target_date)]
     return out_df
 
+def tuned_gps_forecast(dt, df): #edited version from forecast.py
+        
+        out_df = pd.DataFrame(columns=list(df.columns))
+        for i, hour_delta in enumerate([48, 50, 52, 72, 73, 168, 169, 336, 504, 672]):
+            target_date = dt - pd.Timedelta(hour_delta, "hours")
+            df_slice = df[
+                (df.local.dt.hour == target_date.hour) & (df.local.dt.date == target_date.date())
+            ]
+            df_slice_sample = df_slice.sample(frac=[0.11766342, 0.05807056, 0.02653818, 0.09557644, 0.08668869,
+       0.08692645, 0.07926713, 0.28794903, 0.12663206, 0.03468805][i])
+            out_df = out_df.append(df_slice_sample, ignore_index=True)
+
+        return out_df
+
 def prepare_df(df, for_benchmark=False, noCells=noCells, bbox={ "latitude":[51.448953, 51.546925], "longitude": [-0.259661, 0.027820] }):
     #NOTE BBOX CAN BE IMPLEMENTED AS AN ARRAY INSTEAD AND INSERTED INTO histogram2d as range=[[],[]]
     # bbox = { "latitude":[51.448953, 51.546925], "longitude": [-0.259661, 0.027820] } #lat[lower,upper] lng[lower,upper] 
@@ -98,28 +112,35 @@ def get_matrix(df, noCells=noCells, dt=None):
 
 from time import time
 if __name__ == '__main__':
-    #FOR HA TUNING. V
-    start = time()
-    df = load_gps_data("C:/Lanterne/predicio.csv").sort_values("local")
-    print(start - time())
-    start = time()
-    # start = datetime.now() 51.485174, -0.095863
-    bbox = { "latitude":[51.455174, 51.515174], "longitude": [-0.141863, -0.049863] } #selected so a 32 by 32 grid will be 200m each
-    dfForValidationYPrep, validation_timestamps = prepare_df(df, noCells=32, bbox=bbox)
-    dfForValidationYPrep.to_csv("smallerPrepreparedPredicio2.csv")
-    print(start - time())
-    start = time()
-    validation_timestamps = np.random.choice(np.partition(validation_timestamps, int(len(validation_timestamps)*0.1))[:int(len(validation_timestamps)*0.1)], 20, replace=False)
-    validation_timestamps = pd.to_datetime(validation_timestamps)
-    dataset = prepare_dataset(dfForValidationYPrep, validation_timestamps, noCells=32)
-    print(start - time())
-    start = time()
-    dataset.to_pickle("validationDataset2.pickle")
-    print(start - time())
+    ##FOR HA TUNING. V
+    # start = time()
+    # # df = load_gps_data("C:/Users/shadow/Downloads/completed01234.csv").sort_values("local")
+    # df = pd.read_csv("C:/Users/shadow/Downloads/completed01234.csv").sort_values("local")
+    # df.local = pd.to_datetime(df.local)
 
-    exit() 
+    # print(start - time())
+    # start = time()
+    # # start = datetime.now() 51.485174, -0.095863
+    # bbox = { "latitude":[51.455174, 51.515174], "longitude": [-0.141863, -0.049863] } #selected so a 32 by 32 grid will be 200m each
+    # dfForValidationYPrep, validation_timestamps = prepare_df(df, noCells=32, bbox=bbox)
+    # dfForValidationYPrep.to_csv("smallerPrepreparedPredicio01234.csv")
+    # print(start - time())
+    # start = time()
+    # validation_timestamps = np.random.choice(np.partition(validation_timestamps, int(len(validation_timestamps)*(1-0.2)))[int(len(validation_timestamps)*(1-0.2)):], 20, replace=False)
+    # validation_timestamps = pd.to_datetime(validation_timestamps)
+    # dataset = prepare_dataset(dfForValidationYPrep, validation_timestamps, noCells=32)
+    # print(start - time())
+    # start = time()
+    # dataset.to_pickle("validationDataset01234.pickle")
+    # print(start - time())
+
+    # exit() 
     #FOR CNN. V
-    df = load_gps_data("C:/Users/shadow/Downloads/predicio.csv")
+    # df = load_gps_data("C:/Lanterne/smallerPrepreparedPredicio01234.csv")
+    df = pd.read_csv("C:/Lanterne/smallerPrepreparedPredicio01234.csv")
+    df.local = pd.to_datetime(df.local)
     df, timestamps = prepare_df(df)
     dataset = prepare_dataset(df, timestamps, noCells)
-    dataset.to_csv("predicio_dataset.csv")
+    dataset.index.name = "date"
+    dataset.columns = ["data"]
+    dataset.to_pickle("predicio_dataset.pickle")

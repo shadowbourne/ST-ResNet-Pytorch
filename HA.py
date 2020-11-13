@@ -34,7 +34,7 @@ class HA():
         #up until this comment is the same code that would be used for prediction
         return self
     
-    def score(self, X=None, y, sample_weight=None): 
+    def score(self, X=None, y="REQUIRED", sample_weight=None): 
         """
         y should be the matrices for the associated validation set timestamps
         X is not used
