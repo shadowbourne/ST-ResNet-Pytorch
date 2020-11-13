@@ -82,7 +82,7 @@ def prepare_df(df, for_benchmark=False, noCells=noCells, bbox={ "latitude":[51.4
         return df
 
     df["localHour"] = df.local.map(lambda x: x.replace(second=0, microsecond=0, minute=0)) # very slow but needed to get timestamps
-    timestamps = df.localHour[(df.localHour.dt.hour > 7) & (df.localHour.dt.hour < 19)].sort_values().unique()
+    #timestamps = df.localHour[(df.localHour.dt.hour > 7) & (df.localHour.dt.hour < 19)].sort_values().unique()
     timestamps = df.localHour.sort_values().unique()
 
     return df, timestamps
